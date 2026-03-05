@@ -51,13 +51,13 @@ class LTXTextEncoder:
                     if not isinstance(child, torch.nn.Linear):
                         continue
                     child.weight.data = child.weight.data.to(torch.float8_e4m3fn)
-                    if child.bias is not None:
+                    if child.bias is not None:  # pyright: ignore[reportUnnecessaryComparison]
                         child.bias.data = child.bias.data.to(torch.float8_e4m3fn)
 
                     def _make_upcast_forward(lin: torch.nn.Linear) -> Callable[..., torch.Tensor]:
                         def _fwd(x: torch.Tensor, **kw: object) -> torch.Tensor:
                             w = lin.weight.to(x.dtype)
-                            b = lin.bias.to(x.dtype) if lin.bias is not None else None
+                            b = lin.bias.to(x.dtype) if lin.bias is not None else None  # pyright: ignore[reportUnnecessaryComparison]
                             return torch.nn.functional.linear(x, w, b)
                         return _fwd
 
