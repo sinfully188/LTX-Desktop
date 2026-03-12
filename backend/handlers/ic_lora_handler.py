@@ -37,6 +37,9 @@ logger = logging.getLogger(__name__)
 
 
 class IcLoraHandler(StateHandlerBase):
+    _IC_LORA_OUTPUT_WIDTH = 768
+    _IC_LORA_OUTPUT_DIVISOR = 128
+
     def __init__(
         self,
         state: AppState,
@@ -52,6 +55,13 @@ class IcLoraHandler(StateHandlerBase):
         self._pipelines = pipelines_handler
         self._text = text_handler
         self._video_processor = video_processor
+
+    @classmethod
+    def _compute_output_size(cls, input_width: int, input_height: int) -> tuple[int, int]:
+        width = cls._IC_LORA_OUTPUT_WIDTH
+        scaled_height = width * input_height / input_width
+        height = round(scaled_height / cls._IC_LORA_OUTPUT_DIVISOR) * cls._IC_LORA_OUTPUT_DIVISOR
+        return width, max(height, cls._IC_LORA_OUTPUT_DIVISOR)
 
     def _build_conditioning_frame(
         self,
@@ -177,6 +187,9 @@ class IcLoraHandler(StateHandlerBase):
 
             t_preprocess_start = 0.0
             t_preprocess_end = 0.0
+            control_video_path = ""
+            frame_count = 0
+            fps = 0.0
 
             if cached is not None:
                 self._video_processor.release(cap)
@@ -185,41 +198,8 @@ class IcLoraHandler(StateHandlerBase):
                 fps = cached.fps
                 logger.info("[ic-lora] Conditioning cache hit for %s/%s", video_path.name, req.conditioning_type)
             else:
-                t_preprocess_start = time.perf_counter()
-
                 frame_count = int(info["frame_count"])
                 fps = float(info["fps"])
-
-                control_video_path = str(
-                    self.config.outputs_dir / f"_control_{req.conditioning_type}_{uuid.uuid4().hex[:8]}.mp4"
-                )
-                writer = self._video_processor.create_writer(
-                    control_video_path,
-                    fourcc="mp4v",
-                    fps=fps,
-                    size=(int(info["width"]), int(info["height"])),
-                )
-
-                frame_idx = 0
-                while frame_idx < frame_count:
-                    frame = self._video_processor.read_frame(cap)
-                    if frame is None:
-                        break
-                    control_frame = self._build_conditioning_frame(frame, req.conditioning_type, ic_state)
-                    writer.write(control_frame)
-                    frame_idx += 1
-
-                self._video_processor.release(cap)
-                self._video_processor.release(writer)
-                t_preprocess_end = time.perf_counter()
-                logger.info(
-                    "[ic-lora] Preprocessing (%s, %d frames): %.2fs",
-                    req.conditioning_type, frame_idx, t_preprocess_end - t_preprocess_start,
-                )
-
-                ic_state.conditioning_cache.put(
-                    cache_key, ConditioningCacheEntry(control_video_path, frame_count, fps)
-                )
 
             images: list[ImageConditioningInput] = [
                 ImageConditioningInput(path=img.path, frame_idx=int(img.frame), strength=float(img.strength))
@@ -228,12 +208,51 @@ class IcLoraHandler(StateHandlerBase):
 
             self._generation.update_progress("inference", 15, 0, 1)
 
-            width = 768
-            height = round(width * input_height / input_width / 64) * 64
-            height = max(height, 64)
+            width, height = self._compute_output_size(input_width, input_height)
             output_path = (
                 self.config.outputs_dir / f"ic_lora_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.mp4"
             )
+
+            if cached is None:
+                cap = self._video_processor.open_video(str(video_path))
+                if not cap.isOpened():
+                    raise HTTPError(400, f"Cannot open video: {video_path}")
+
+                control_video_path = str(
+                    self.config.outputs_dir / f"_control_{req.conditioning_type}_{uuid.uuid4().hex[:8]}.mp4"
+                )
+                writer = self._video_processor.create_writer(
+                    control_video_path,
+                    fourcc="mp4v",
+                    fps=fps,
+                    size=(width, height),
+                )
+
+                frame_idx = 0
+                t_preprocess_start = time.perf_counter()
+                while frame_idx < frame_count:
+                    frame = self._video_processor.read_frame(cap)
+                    if frame is None:
+                        break
+                    control_frame = self._build_conditioning_frame(frame, req.conditioning_type, ic_state)
+                    fitted_frame = self._video_processor.resize_and_crop(control_frame, width, height)
+                    writer.write(fitted_frame)
+                    frame_idx += 1
+
+                self._video_processor.release(cap)
+                self._video_processor.release(writer)
+                t_preprocess_end = time.perf_counter()
+                logger.info(
+                    "[ic-lora] Preprocessing (%s, %d frames -> %dx%d): %.2fs",
+                    req.conditioning_type, frame_idx, width, height, t_preprocess_end - t_preprocess_start,
+                )
+
+                ic_state.conditioning_cache.put(
+                    cache_key, ConditioningCacheEntry(control_video_path, frame_count, fps)
+                )
+
+            if not control_video_path:
+                raise HTTPError(500, "IC-LoRA conditioning video was not prepared")
 
             t_inference_start = time.perf_counter()
             ic_state.pipeline.generate(

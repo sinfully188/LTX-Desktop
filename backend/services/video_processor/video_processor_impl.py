@@ -71,6 +71,25 @@ class VideoProcessorImpl:
     def apply_pose(self, frame: FrameArray, pose_pipeline: PoseProcessorPipeline) -> FrameArray:
         return pose_pipeline.apply(frame)
 
+    def resize_and_crop(self, frame: FrameArray, width: int, height: int) -> FrameArray:
+        import cv2
+
+        src_h, src_w = frame.shape[:2]
+        target_ratio = width / height
+        src_ratio = src_w / src_h
+
+        if src_ratio > target_ratio:
+            new_h = height
+            new_w = int(src_w * (height / src_h))
+        else:
+            new_w = width
+            new_h = int(src_h * (width / src_w))
+
+        resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
+        left = max((new_w - width) // 2, 0)
+        top = max((new_h - height) // 2, 0)
+        return cast(FrameArray, resized[top:top + height, left:left + width])
+
     def encode_frame_jpeg(self, frame: FrameArray, quality: int = 85) -> bytes:
         import cv2
 

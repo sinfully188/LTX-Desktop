@@ -334,3 +334,38 @@ class TestIcLoraGenerate:
 
         # Cache hit: no new control video should have been written
         assert len(test_state.video_processor.writers) == writers_after_first
+
+    def test_generation_resizes_conditioning_video_to_valid_target_dimensions(self, client, test_state, fake_services):
+        video_path = test_state.config.outputs_dir / "portrait_input.mp4"
+        video_path.write_bytes(b"\x00" * 100)
+        _create_ic_lora_resources(test_state)
+
+        te_dir = _model_path(test_state,"text_encoder")
+        te_dir.mkdir(parents=True, exist_ok=True)
+        (te_dir / "model.safetensors").write_bytes(b"\x00" * 100)
+        test_state.state.app_settings.use_local_text_encoder = True
+
+        capture = FakeCapture(frames=["f1", "f2"], fps=24, width=1080, height=1920)
+        test_state.video_processor.register_video(str(video_path), capture)
+
+        response = client.post(
+            "/api/ic-lora/generate",
+            json={
+                "video_path": str(video_path),
+                "prompt": "test prompt",
+                "conditioning_type": "canny",
+            },
+        )
+
+        assert response.status_code == 200
+        assert len(test_state.video_processor.writers) == 1
+        writer = test_state.video_processor.writers[0]
+        assert writer.size == (768, 1408)
+        assert writer.frames == [
+            "resized:768x1408:canny:f1",
+            "resized:768x1408:canny:f2",
+        ]
+
+        pipeline = fake_services.ic_lora_pipeline
+        assert pipeline.generate_calls[0]["width"] == 768
+        assert pipeline.generate_calls[0]["height"] == 1408
