@@ -26,6 +26,7 @@ from server_utils.media_validation import (
     validate_audio_file,
     validate_image_file,
 )
+from server_utils.audio_preprocessing import prepare_a2v_audio_file
 from services.interfaces import LTXAPIClient
 from state.app_state_types import AppState
 from state.app_settings import should_video_generate_with_ltx_api
@@ -249,7 +250,6 @@ class VideoGenerationHandler(StateHandlerBase):
         if req.model != "pro":
             logger.warning("A2V local requested with model=%s; A2V always uses pro pipeline", req.model)
         validated_audio_path = validate_audio_file(audio_path)
-        audio_path_str = str(validated_audio_path)
 
         RESOLUTION_MAP: dict[str, tuple[int, int]] = {
             "540p": (960, 576),
@@ -299,21 +299,22 @@ class VideoGenerationHandler(StateHandlerBase):
             self._text.prepare_text_encoding(enhanced_prompt, enhance_prompt=a2v_enhance)
             self._generation.update_progress("inference", 15, 0, total_steps)
 
-            a2v_state.pipeline.generate(
-                prompt=enhanced_prompt,
-                negative_prompt=neg,
-                seed=seed,
-                height=height,
-                width=width,
-                num_frames=num_frames,
-                frame_rate=fps,
-                num_inference_steps=total_steps,
-                images=images,
-                audio_path=audio_path_str,
-                audio_start_time=0.0,
-                audio_max_duration=None,
-                output_path=str(output_path),
-            )
+            with prepare_a2v_audio_file(validated_audio_path) as prepared_audio_path:
+                a2v_state.pipeline.generate(
+                    prompt=enhanced_prompt,
+                    negative_prompt=neg,
+                    seed=seed,
+                    height=height,
+                    width=width,
+                    num_frames=num_frames,
+                    frame_rate=fps,
+                    num_inference_steps=total_steps,
+                    images=images,
+                    audio_path=str(prepared_audio_path),
+                    audio_start_time=0.0,
+                    audio_max_duration=None,
+                    output_path=str(output_path),
+                )
 
             if self._generation.is_generation_cancelled():
                 if output_path.exists():
@@ -428,28 +429,29 @@ class VideoGenerationHandler(StateHandlerBase):
                 if image_path is not None:
                     validated_image_path = validate_image_file(image_path)
 
-                self._generation.update_progress("uploading_audio", 20, None, None)
-                audio_uri = self._ltx_api_client.upload_file(
-                    api_key=api_key,
-                    file_path=str(validated_audio_path),
-                )
-                image_uri: str | None = None
-                if validated_image_path is not None:
-                    self._generation.update_progress("uploading_image", 35, None, None)
-                    image_uri = self._ltx_api_client.upload_file(
+                with prepare_a2v_audio_file(validated_audio_path) as prepared_audio_path:
+                    self._generation.update_progress("uploading_audio", 20, None, None)
+                    audio_uri = self._ltx_api_client.upload_file(
                         api_key=api_key,
-                        file_path=str(validated_image_path),
+                        file_path=str(prepared_audio_path),
                     )
-                self._generation.update_progress("inference", 55, None, None)
-                video_bytes = self._ltx_api_client.generate_audio_to_video(
-                    api_key=api_key,
-                    prompt=prompt,
-                    audio_uri=audio_uri,
-                    image_uri=image_uri,
-                    model=api_model_id,
-                    resolution=api_resolution,
-                )
-                self._generation.update_progress("downloading_output", 85, None, None)
+                    image_uri: str | None = None
+                    if validated_image_path is not None:
+                        self._generation.update_progress("uploading_image", 35, None, None)
+                        image_uri = self._ltx_api_client.upload_file(
+                            api_key=api_key,
+                            file_path=str(validated_image_path),
+                        )
+                    self._generation.update_progress("inference", 55, None, None)
+                    video_bytes = self._ltx_api_client.generate_audio_to_video(
+                        api_key=api_key,
+                        prompt=prompt,
+                        audio_uri=audio_uri,
+                        image_uri=image_uri,
+                        model=api_model_id,
+                        resolution=api_resolution,
+                    )
+                    self._generation.update_progress("downloading_output", 85, None, None)
             elif has_input_image:
                 validated_image_path = validate_image_file(image_path)
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import wave
 
 from state.app_state_types import GpuSlot, VideoPipelineState, VideoPipelineWarmth
 from tests.fakes.services import FakeFastVideoPipeline
@@ -26,8 +27,6 @@ _T2V_JSON = {
 
 
 def _write_test_wav(path: Path, *, duration_seconds: float = 0.1, sample_rate: int = 8000) -> None:
-    import wave
-
     frame_count = max(1, int(duration_seconds * sample_rate))
     with wave.open(str(path), "wb") as wav_file:
         wav_file.setnchannels(1)
@@ -193,7 +192,9 @@ class TestA2VGenerate:
         pipeline = fake_services.a2v_pipeline
         assert len(pipeline.generate_calls) == 1
         call = pipeline.generate_calls[0]
-        assert call["audio_path"] == str(audio_file)
+        normalized_audio = Path(call["audio_path"])
+        assert normalized_audio != audio_file
+        assert normalized_audio.suffix == ".wav"
         assert call["audio_start_time"] == 0.0
         assert call["audio_max_duration"] is None
 
@@ -250,10 +251,13 @@ class TestA2VGenerate:
         assert r.status_code == 200
         assert r.json()["status"] == "complete"
         assert len(fake_services.ltx_api_client.upload_file_calls) == 1
-        assert fake_services.ltx_api_client.upload_file_calls[0]["file_path"] == str(audio_file)
+        uploaded_audio_path = Path(fake_services.ltx_api_client.upload_file_calls[0]["file_path"])
+        assert uploaded_audio_path != audio_file
+        assert uploaded_audio_path.suffix == ".wav"
         assert len(fake_services.ltx_api_client.audio_to_video_calls) == 1
         call = fake_services.ltx_api_client.audio_to_video_calls[0]
-        assert call["audio_uri"] == "storage://uploaded/test_audio.wav"
+        assert call["audio_uri"].startswith("storage://uploaded/")
+        assert call["audio_uri"].endswith(".wav")
         assert call["image_uri"] is None
         assert call["model"] == "ltx-2-3-pro"
         assert call["resolution"] == "1920x1080"
@@ -280,7 +284,7 @@ class TestA2VGenerate:
         assert r.status_code == 200
         assert r.json()["status"] == "complete"
         assert len(fake_services.ltx_api_client.upload_file_calls) == 1
-        assert fake_services.ltx_api_client.upload_file_calls[0]["file_path"] == str(audio_file)
+        assert Path(fake_services.ltx_api_client.upload_file_calls[0]["file_path"]).suffix == ".wav"
         assert len(fake_services.ltx_api_client.audio_to_video_calls) == 1
         assert len(fake_services.a2v_pipeline.generate_calls) == 0
 
@@ -336,14 +340,32 @@ class TestA2VGenerate:
         assert r.status_code == 200
         assert r.json()["status"] == "complete"
         assert len(fake_services.ltx_api_client.upload_file_calls) == 2
-        assert fake_services.ltx_api_client.upload_file_calls[0]["file_path"] == str(audio_file)
+        assert Path(fake_services.ltx_api_client.upload_file_calls[0]["file_path"]).suffix == ".wav"
         assert fake_services.ltx_api_client.upload_file_calls[1]["file_path"] == str(image_path)
         assert len(fake_services.ltx_api_client.audio_to_video_calls) == 1
         call = fake_services.ltx_api_client.audio_to_video_calls[0]
-        assert call["audio_uri"] == "storage://uploaded/test_audio.wav"
+        assert call["audio_uri"].startswith("storage://uploaded/")
+        assert call["audio_uri"].endswith(".wav")
         assert call["image_uri"] == "storage://uploaded/input.png"
         assert call["model"] == "ltx-2-3-pro"
         assert call["resolution"] == "1920x1080"
+
+
+class TestA2VAudioPreprocessing:
+    def test_prepare_a2v_audio_converts_to_stereo_and_trims(self, tmp_path):
+        from server_utils.audio_preprocessing import prepare_a2v_audio_file
+
+        input_audio = tmp_path / "long_mono.wav"
+        _write_test_wav(input_audio, duration_seconds=25.0, sample_rate=8000)
+
+        with prepare_a2v_audio_file(input_audio) as prepared_audio:
+            assert prepared_audio.exists()
+            with wave.open(str(prepared_audio), "rb") as wav_file:
+                assert wav_file.getnchannels() == 2
+                duration_seconds = wav_file.getnframes() / wav_file.getframerate()
+                assert duration_seconds <= 20.1
+
+        assert not prepared_audio.exists()
 
     def test_a2v_uses_resolution_map(self, client, test_state, fake_services, create_fake_model_files, tmp_path):
         create_fake_model_files()
