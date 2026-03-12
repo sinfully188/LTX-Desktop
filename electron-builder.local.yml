@@ -1,0 +1,56 @@
+appId: com.lightricks.ltx-desktop
+productName: LTX Desktop
+copyright: Copyright © 2026 Lightricks
+
+directories:
+  output: release
+  buildResources: resources
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+  - LICENSE.txt
+  - NOTICES.md
+  - "!**/*.map"
+
+asarUnpack:
+  - dist/splash/**
+
+extraResources:
+  - from: backend
+    to: backend
+    filter:
+      - "**/*.py"
+      - pyproject.toml
+      - "!**/__pycache__/**"
+      - "!**/*.pyc"
+      - "!.venv/**"
+      - "!outputs/**"
+      - "!models/**"
+      - "!tests/**"
+  - from: python-deps-hash.txt
+    to: python-deps-hash.txt
+
+win:
+  target:
+    - target: dir
+      arch:
+        - x64
+  icon: resources/icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  include: resources/installer.nsh
+  installerIcon: resources/icon.ico
+  uninstallerIcon: resources/icon.ico
+  installerHeaderIcon: resources/icon.ico
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: LTX Desktop
+
+publish:
+  provider: github
+  owner: Lightricks
+  repo: ltx-desktop

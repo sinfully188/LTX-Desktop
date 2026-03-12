@@ -180,6 +180,102 @@ function Get-SearchRoots {
     return $roots
 }
 
+function Get-CandidateNames {
+    param($Spec)
+
+    switch ($Spec.ModelId) {
+        'zit' {
+            return @('Z-Image-Turbo', 'Z-Image')
+        }
+        default {
+            return @($Spec.Name)
+        }
+    }
+}
+
+function Test-IsLoraModel {
+    param($Spec)
+
+    return $Spec.ModelId -in @('distilled_lora', 'ic_lora')
+}
+
+function Get-PathSegmentsLower {
+    param([string]$Path)
+
+    return @($Path -split '[\\/]+' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_.ToLowerInvariant() })
+}
+
+function Test-PathContainsSegment {
+    param(
+        [string]$Path,
+        [string]$Segment
+    )
+
+    $segments = Get-PathSegmentsLower $Path
+    return $segments -contains $Segment.ToLowerInvariant()
+}
+
+function Get-PreferredBaseSegments {
+    param($Spec)
+
+    switch ($Spec.ModelId) {
+        'checkpoint' { return @('stable-diffusion', 'diffusion_models') }
+        'upsampler' { return @('stable-diffusion', 'diffusion_models', 'latent_upscale_models') }
+        'zit' { return @('diffusion_models', 'stable-diffusion') }
+        'text_encoder' { return @('text_encoders', 'stable-diffusion', 'diffusion_models') }
+        default { return @() }
+    }
+}
+
+function Test-PreferredBaseLocation {
+    param(
+        $Spec,
+        [string]$Path
+    )
+
+    $preferredSegments = Get-PreferredBaseSegments $Spec
+    if ($preferredSegments.Count -eq 0) {
+        return $false
+    }
+
+    foreach ($segment in $preferredSegments) {
+        if (Test-PathContainsSegment -Path $Path -Segment $segment) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Test-RejectCandidate {
+    param(
+        $Spec,
+        [string]$Path,
+        [bool]$IsFolder,
+        [Int64]$SizeBytes,
+        [Int64]$ExpectedSizeBytes
+    )
+
+    if (-not (Test-IsLoraModel $Spec) -and (Test-PathContainsSegment -Path $Path -Segment 'lora')) {
+        return $true
+    }
+
+    if ($Spec.ModelId -eq 'zit') {
+        if (-not (Test-PreferredBaseLocation -Spec $Spec -Path $Path)) {
+            return $true
+        }
+
+        if ($IsFolder -and $ExpectedSizeBytes -gt 0) {
+            $minimumAcceptable = [Int64]([math]::Floor($ExpectedSizeBytes * 0.70))
+            if ($SizeBytes -lt $minimumAcceptable) {
+                return $true
+            }
+        }
+    }
+
+    return $false
+}
+
 function Get-CandidatesForSpec {
     param(
         $Spec,
@@ -191,12 +287,16 @@ function Get-CandidatesForSpec {
     $canonicalTarget = Get-NormalizedPath (Join-Path $ModelsDir $Spec.RelativePath)
     $unique = @{}
 
+    $candidateNames = Get-CandidateNames $Spec
+
     foreach ($root in $SearchRoots) {
         if ($Spec.IsFolder) {
             $items = Get-ChildItem -LiteralPath $root -Recurse -Force -Directory -ErrorAction SilentlyContinue |
-                Where-Object { $_.Name -eq $Spec.Name }
+                Where-Object { $candidateNames -contains $_.Name }
         } else {
-            $items = Get-ChildItem -LiteralPath $root -Recurse -Force -File -Filter $Spec.Name -ErrorAction SilentlyContinue
+            $items = foreach ($candidateName in $candidateNames) {
+                Get-ChildItem -LiteralPath $root -Recurse -Force -File -Filter $candidateName -ErrorAction SilentlyContinue
+            }
         }
 
         foreach ($item in $items) {
@@ -206,9 +306,18 @@ function Get-CandidatesForSpec {
             }
 
             $sizeBytes = Get-ArtifactSizeBytes -Path $path -IsFolder $Spec.IsFolder
+            if (Test-RejectCandidate -Spec $Spec -Path $path -IsFolder $Spec.IsFolder -SizeBytes $sizeBytes -ExpectedSizeBytes $expectedSize) {
+                continue
+            }
+
             $score = 100
             $reasons = New-Object System.Collections.Generic.List[string]
             $reasons.Add('exact-name')
+
+            if (Test-PreferredBaseLocation -Spec $Spec -Path $path) {
+                $score += 15
+                $reasons.Add('preferred-base-location')
+            }
 
             if ($path -eq $canonicalTarget) {
                 $score += 50
@@ -448,20 +557,24 @@ function Validate-Link {
 
     $targetItem = Get-Item -LiteralPath $TargetPath -Force
     $resolvedTarget = ''
-    if ($null -ne $targetItem.PSObject.Properties['ResolvedTarget'] -and -not [string]::IsNullOrWhiteSpace([string]$targetItem.ResolvedTarget)) {
-        $resolvedTarget = Get-NormalizedPath ([string]$targetItem.ResolvedTarget)
+    if ($null -ne $targetItem.PSObject.Properties['LinkTarget'] -and -not [string]::IsNullOrWhiteSpace([string]$targetItem.LinkTarget)) {
+        $resolvedTarget = Get-NormalizedPath ([string]$targetItem.LinkTarget)
     } elseif ($null -ne $targetItem.PSObject.Properties['Target'] -and -not [string]::IsNullOrWhiteSpace([string]$targetItem.Target)) {
         $resolvedTarget = Get-NormalizedPath ([string]$targetItem.Target)
-    } elseif ($null -ne $targetItem.PSObject.Properties['LinkTarget'] -and -not [string]::IsNullOrWhiteSpace([string]$targetItem.LinkTarget)) {
-        $resolvedTarget = Get-NormalizedPath ([string]$targetItem.LinkTarget)
+    } elseif ($null -ne $targetItem.PSObject.Properties['ResolvedTarget'] -and -not [string]::IsNullOrWhiteSpace([string]$targetItem.ResolvedTarget)) {
+        $resolvedTarget = Get-NormalizedPath ([string]$targetItem.ResolvedTarget)
     } else {
         $resolvedTarget = Get-NormalizedPath ((Resolve-Path -LiteralPath $TargetPath).Path)
     }
 
-    $resolvedSource = Get-NormalizedPath ((Resolve-Path -LiteralPath $SourcePath).Path)
+    $resolvedSource = Get-NormalizedPath $SourcePath
 
     if ($resolvedTarget -ne $resolvedSource) {
         throw "Link validation failed for $TargetPath (resolved to $resolvedTarget, expected $resolvedSource)"
+    }
+
+    if ($LinkMode -eq 'SymbolicLink') {
+        return
     }
 
     $targetSize = Get-ArtifactSizeBytes -Path $TargetPath -IsFolder $Spec.IsFolder
