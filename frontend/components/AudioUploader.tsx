@@ -8,20 +8,35 @@ interface AudioUploaderProps {
   selectedAudio: string | null
 }
 
+function toFileUrl(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/')
+  return normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`
+}
+
 export function AudioUploader({ onAudioSelect, selectedAudio }: AudioUploaderProps) {
+  const chooseAudioFile = useCallback(async () => {
+    const paths = await window.electronAPI.showOpenFileDialog({
+      title: 'Select audio',
+      filters: [{ name: 'Audio', extensions: ['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a'] }],
+      properties: ['openFile'],
+    })
+    const selectedPath = paths?.[0]
+    if (selectedPath) {
+      onAudioSelect(toFileUrl(selectedPath))
+    }
+  }, [onAudioSelect])
+
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
     if (file) {
       const filePath = (file as any).path as string | undefined
       if (filePath) {
-        const normalized = filePath.replace(/\\/g, '/')
-        const fileUrl = normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`
-        onAudioSelect(fileUrl)
+        onAudioSelect(toFileUrl(filePath))
       }
     }
   }, [onAudioSelect])
 
-  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
       'audio/mpeg': ['.mp3'],
@@ -33,7 +48,7 @@ export function AudioUploader({ onAudioSelect, selectedAudio }: AudioUploaderPro
     },
     maxSize: 50 * 1024 * 1024, // 50MB
     multiple: false,
-    noClick: !!selectedAudio,
+    noClick: true,
   })
 
   const clearAudio = (e: React.MouseEvent) => {
@@ -41,9 +56,9 @@ export function AudioUploader({ onAudioSelect, selectedAudio }: AudioUploaderPro
     onAudioSelect(null)
   }
 
-  const replaceAudio = (e: React.MouseEvent) => {
+  const replaceAudio = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    open()
+    await chooseAudioFile()
   }
 
   const getDisplayName = (path: string | null): string => {
@@ -65,6 +80,11 @@ export function AudioUploader({ onAudioSelect, selectedAudio }: AudioUploaderPro
       </label>
       <div
         {...getRootProps()}
+        onClick={() => {
+          if (!selectedAudio) {
+            void chooseAudioFile()
+          }
+        }}
         className={cn(
           'relative border border-dashed border-zinc-600 rounded-lg cursor-pointer transition-colors',
           'hover:border-zinc-500',
