@@ -382,8 +382,9 @@ class FakeCapture:
 
 
 class FakeWriter:
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, size: tuple[int, int] | None = None) -> None:
         self.path = Path(path)
+        self.size = size
         self.frames: list[Any] = []
         self.released = False
 
@@ -435,11 +436,14 @@ class FakeVideoProcessor:
     def apply_pose(self, frame: Any, pose_pipeline: Any) -> Any:
         return pose_pipeline.apply(frame)
 
+    def resize_and_crop(self, frame: Any, width: int, height: int) -> Any:
+        return f"resized:{width}x{height}:{frame}"
+
     def encode_frame_jpeg(self, frame: Any, quality: int = 85) -> bytes:  # noqa: ARG002
         return f"jpeg:{frame}".encode("utf-8")
 
     def create_writer(self, path: str, fourcc: str, fps: float, size: tuple[int, int]) -> FakeWriter:  # noqa: ARG002
-        writer = FakeWriter(path)
+        writer = FakeWriter(path, size)
         self.writers.append(writer)
         return writer
 

@@ -37,6 +37,9 @@ class VideoProcessor(Protocol):
     def apply_pose(self, frame: FrameArray, pose_pipeline: PoseProcessorPipeline) -> FrameArray:
         ...
 
+    def resize_and_crop(self, frame: FrameArray, width: int, height: int) -> FrameArray:
+        ...
+
     def encode_frame_jpeg(self, frame: FrameArray, quality: int = 85) -> bytes:
         ...
 
