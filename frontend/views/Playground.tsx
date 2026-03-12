@@ -129,6 +129,11 @@ export function Playground() {
   // Ref to store generated image URL for "Create video" flow
   const generatedImageRef = useRef<string | null>(null)
 
+  const effectiveMode: GenerationMode =
+    mode === 'text-to-video' || mode === 'image-to-video'
+      ? (selectedImage ? 'image-to-video' : 'text-to-video')
+      : mode
+
   const handleGenerate = () => {
     if (mode === 'ic-lora') {
       if (!icLoraInput.videoPath || !icLoraInput.ready || !prompt.trim()) return
@@ -153,7 +158,7 @@ export function Playground() {
       return
     }
 
-    if (mode === 'text-to-image') {
+    if (effectiveMode === 'text-to-image') {
       if (!prompt.trim()) return
       // Text-to-image behavior remains tied to raw forceApiGenerations in useGeneration.
       generateImage(prompt, settings)
@@ -217,7 +222,7 @@ export function Playground() {
 
   const isRetakeMode = mode === 'retake'
   const isIcLoraMode = mode === 'ic-lora'
-  const isVideoMode = mode === 'text-to-video' || mode === 'image-to-video'
+  const isVideoMode = effectiveMode === 'text-to-video' || effectiveMode === 'image-to-video'
   const isBusy = isRetakeMode ? isRetaking : isIcLoraMode ? isIcLoraGenerating : isGenerating
   const canGenerate = processStatus === 'alive' && !isBusy && (
     isRetakeMode
@@ -278,6 +283,11 @@ export function Playground() {
                   selectedImage={selectedImage}
                   onImageSelect={setSelectedImage}
                 />
+                <div className="-mt-3 text-xs text-zinc-500">
+                  {effectiveMode === 'image-to-video'
+                    ? 'Mode: Image to Video'
+                    : 'Add an image to switch this request to Image to Video'}
+                </div>
                 <AudioUploader
                   selectedAudio={selectedAudio}
                   onAudioSelect={setSelectedAudio}
@@ -360,7 +370,7 @@ export function Playground() {
                 settings={settings}
                 onSettingsChange={setSettings}
                 disabled={isBusy}
-                mode={mode}
+                mode={effectiveMode}
                 forceApiGenerations={shouldVideoGenerateWithLtxApi}
                 hasAudio={!!selectedAudio}
               />
@@ -425,7 +435,7 @@ export function Playground() {
                       <Sparkles className="h-4 w-4" />
                       {isIcLoraGenerating ? 'Generating...' : 'Generate IC-LoRA'}
                     </>
-                  ) : mode === 'text-to-image' ? (
+                  ) : effectiveMode === 'text-to-image' ? (
                     <>
                       <ImageIcon className="h-4 w-4" />
                       Generate image
@@ -433,7 +443,7 @@ export function Playground() {
                   ) : (
                     <>
                       <Sparkles className="h-4 w-4" />
-                      Generate video
+                      {effectiveMode === 'image-to-video' ? 'Generate image to video' : 'Generate video'}
                     </>
                   )}
                 </Button>
@@ -444,7 +454,7 @@ export function Playground() {
 
         {/* Right Panel - Result Preview */}
         <div className="flex-1 p-6">
-          {mode === 'text-to-image' ? (
+          {effectiveMode === 'text-to-image' ? (
             <ImageResult
               imageUrl={imageUrl}
               isGenerating={isGenerating}

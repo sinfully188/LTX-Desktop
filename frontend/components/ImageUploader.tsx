@@ -8,24 +8,36 @@ interface ImageUploaderProps {
   selectedImage: string | null
 }
 
+function toFileUrl(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/')
+  return normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`
+}
+
 export function ImageUploader({ onImageSelect, selectedImage }: ImageUploaderProps) {
+  const chooseImageFile = useCallback(async () => {
+    const paths = await window.electronAPI.showOpenFileDialog({
+      title: 'Select image',
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
+      properties: ['openFile'],
+    })
+    const selectedPath = paths?.[0]
+    if (selectedPath) {
+      onImageSelect(toFileUrl(selectedPath))
+    }
+  }, [onImageSelect])
+
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
     if (file) {
       // In Electron, File objects have a .path property with the full filesystem path
       const filePath = (file as any).path as string | undefined
       if (filePath) {
-        const normalized = filePath.replace(/\\/g, '/')
-        const fileUrl = normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`
-        onImageSelect(fileUrl)
-      } else {
-        const url = URL.createObjectURL(file)
-        onImageSelect(url)
+        onImageSelect(toFileUrl(filePath))
       }
     }
   }, [onImageSelect])
 
-  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
       'image/png': ['.png'],
@@ -34,7 +46,7 @@ export function ImageUploader({ onImageSelect, selectedImage }: ImageUploaderPro
     },
     maxSize: 10 * 1024 * 1024, // 10MB
     multiple: false,
-    noClick: !!selectedImage, // Disable click when image is loaded
+    noClick: true,
   })
 
   const clearImage = (e: React.MouseEvent) => {
@@ -42,9 +54,9 @@ export function ImageUploader({ onImageSelect, selectedImage }: ImageUploaderPro
     onImageSelect(null)
   }
 
-  const replaceImage = (e: React.MouseEvent) => {
+  const replaceImage = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    open()
+    await chooseImageFile()
   }
 
   // Extract and truncate filename from path for display
@@ -68,6 +80,11 @@ export function ImageUploader({ onImageSelect, selectedImage }: ImageUploaderPro
       </label>
       <div
         {...getRootProps()}
+        onClick={() => {
+          if (!selectedImage) {
+            void chooseImageFile()
+          }
+        }}
         className={cn(
           'relative border border-dashed border-zinc-600 rounded-lg cursor-pointer transition-colors',
           'hover:border-zinc-500',
