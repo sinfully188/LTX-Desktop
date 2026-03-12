@@ -42,6 +42,32 @@ The application stores a single effective `models_dir` setting and resolves all 
 
 The current implementation is based on one canonical model root, not a recursive multi-layout search.
 
+## Reusing existing model files
+
+The repository includes a Windows helper script at `scripts/link-existing-models.ps1` for reusing existing model files from another directory tree.
+
+### Create a manifest
+
+```powershell
+& .\scripts\link-existing-models.ps1 find -ComfyRoot <existing-model-root>
+```
+
+By default, the manifest is written to the configured LTX Desktop models directory as `ltx-model-links.yaml`.
+
+### Create canonical links
+
+```powershell
+& .\scripts\link-existing-models.ps1 link -ManifestPath <manifest-path>
+```
+
+The script creates canonical targets in the LTX Desktop models directory using:
+
+- hardlinks for files when source and target are on the same local volume
+- junctions for directories on local paths
+- symbolic links when hardlinks or junctions are not applicable
+
+Existing canonical targets are replaced during linking.
+
 ## Local build notes
 
 ### `pnpm` availability
