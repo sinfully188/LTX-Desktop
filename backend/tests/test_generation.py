@@ -21,8 +21,8 @@ _T2V_JSON = {
     "prompt": "test",
     "resolution": "540p",
     "model": "fast",
-    "duration": "2",
-    "fps": "24",
+    "duration": 2,
+    "fps": 24,
 }
 
 
@@ -47,7 +47,6 @@ def _fake_running_generation_state(test_state) -> None:
             warmth=VideoPipelineWarmth.COLD,
             is_compiled=False,
         ),
-        generation=None,
     )
     test_state.generation.start_generation("running")
 
@@ -63,8 +62,8 @@ class TestGenerate:
                 "prompt": "A beautiful sunset",
                 "resolution": "1080p",
                 "model": "fast",
-                "duration": "2",
-                "fps": "24",
+                "duration": 2,
+                "fps": 24,
                 "cameraMotion": "none",
             },
         )
@@ -176,9 +175,9 @@ class TestA2VGenerate:
             json={
                 "prompt": "A music video",
                 "resolution": "540p",
-                "model": "fast",
-                "duration": "2",
-                "fps": "24",
+                "model": "pro",
+                "duration": 2,
+                "fps": 24,
                 "audioPath": str(audio_file),
             },
         )
@@ -206,8 +205,9 @@ class TestA2VGenerate:
             "/api/generate",
             json={
                 "prompt": "A music video",
-                "duration": "2",
-                "fps": "24",
+                "model": "pro",
+                "duration": 2,
+                "fps": 24,
                 "audioPath": "/no/such/audio.wav",
             },
         )
@@ -223,8 +223,9 @@ class TestA2VGenerate:
             "/api/generate",
             json={
                 "prompt": "A music video",
-                "duration": "2",
-                "fps": "24",
+                "model": "pro",
+                "duration": 2,
+                "fps": 24,
                 "audioPath": str(audio_file),
             },
         )
@@ -242,9 +243,9 @@ class TestA2VGenerate:
             json={
                 "prompt": "A music video",
                 "resolution": "1080p",
-                "model": "fast",
-                "duration": "6",
-                "fps": "50",
+                "model": "pro",
+                "duration": 6,
+                "fps": 50,
                 "audioPath": str(audio_file),
             },
         )
@@ -274,9 +275,9 @@ class TestA2VGenerate:
             json={
                 "prompt": "A music video",
                 "resolution": "1080p",
-                "model": "fast",
-                "duration": "6",
-                "fps": "50",
+                "model": "pro",
+                "duration": 6,
+                "fps": 50,
                 "audioPath": str(audio_file),
             },
         )
@@ -302,9 +303,9 @@ class TestA2VGenerate:
             json={
                 "prompt": "A music video",
                 "resolution": "540p",
-                "model": "fast",
-                "duration": "2",
-                "fps": "24",
+                "model": "pro",
+                "duration": 2,
+                "fps": 24,
                 "audioPath": str(audio_file),
             },
         )
@@ -330,8 +331,8 @@ class TestA2VGenerate:
                 "prompt": "A music video with a still frame",
                 "resolution": "2160p",
                 "model": "pro",
-                "duration": "6",
-                "fps": "50",
+                "duration": 6,
+                "fps": 50,
                 "audioPath": str(audio_file),
                 "imagePath": str(image_path),
             },
@@ -385,8 +386,8 @@ class TestA2VAudioPreprocessing:
                     "prompt": "A music video",
                     "resolution": resolution,
                     "model": "pro",
-                    "duration": "2",
-                    "fps": "24",
+                    "duration": 2,
+                    "fps": 24,
                     "audioPath": str(audio_file),
                 },
             )
@@ -405,9 +406,9 @@ class TestA2VAudioPreprocessing:
             json={
                 "prompt": "A music video",
                 "resolution": "1080p",
-                "model": "fast",
-                "duration": "6",
-                "fps": "50",
+                "model": "pro",
+                "duration": 6,
+                "fps": 50,
                 "audioPath": "/no/such/audio.wav",
             },
         )
@@ -426,9 +427,9 @@ class TestA2VAudioPreprocessing:
             json={
                 "prompt": "A music video",
                 "resolution": "1080p",
-                "model": "fast",
-                "duration": "6",
-                "fps": "50",
+                "model": "pro",
+                "duration": 6,
+                "fps": 50,
                 "audioPath": str(audio_file),
             },
         )
@@ -448,9 +449,9 @@ class TestA2VAudioPreprocessing:
             json={
                 "prompt": "A music video",
                 "resolution": "1080p",
-                "model": "fast",
-                "duration": "6",
-                "fps": "50",
+                "model": "pro",
+                "duration": 6,
+                "fps": 50,
                 "audioPath": str(audio_file),
             },
         )
@@ -471,9 +472,9 @@ class TestForcedApiGenerate:
                 "prompt": "A mountain lake",
                 "resolution": "1080p",
                 "model": "fast",
-                "duration": "6",
-                "fps": "50",
-                "audio": "true",
+                "duration": 6,
+                "fps": 50,
+                "audio": True,
                 "cameraMotion": "dolly_in",
             },
         )
@@ -507,9 +508,9 @@ class TestForcedApiGenerate:
                 "prompt": "A mountain lake",
                 "resolution": "1080p",
                 "model": "fast",
-                "duration": "6",
-                "fps": "50",
-                "audio": "true",
+                "duration": 6,
+                "fps": 50,
+                "audio": True,
                 "cameraMotion": "dolly_in",
             },
         )
@@ -537,9 +538,9 @@ class TestForcedApiGenerate:
                 "prompt": "Animate this frame",
                 "resolution": "2160p",
                 "model": "pro",
-                "duration": "8",
-                "fps": "25",
-                "audio": "false",
+                "duration": 8,
+                "fps": 25,
+                "audio": False,
                 "cameraMotion": "jib_up",
                 "imagePath": str(image_path),
             },
@@ -568,9 +569,9 @@ class TestForcedApiGenerate:
                 "prompt": "A mountain lake",
                 "resolution": "1080p",
                 "model": "fast",
-                "duration": "6",
-                "fps": "50",
-                "audio": "true",
+                "duration": 6,
+                "fps": 50,
+                "audio": True,
                 "cameraMotion": "none",
             },
         )
@@ -592,9 +593,9 @@ class TestForcedApiGenerate:
                 "prompt": "Animate this frame",
                 "resolution": "2160p",
                 "model": "pro",
-                "duration": "8",
-                "fps": "25",
-                "audio": "false",
+                "duration": 8,
+                "fps": 25,
+                "audio": False,
                 "cameraMotion": "none",
                 "imagePath": str(image_path),
             },
@@ -620,9 +621,9 @@ class TestForcedApiGenerate:
                 "prompt": "Animate this frame quickly",
                 "resolution": "1080p",
                 "model": "fast",
-                "duration": "6",
-                "fps": "25",
-                "audio": "false",
+                "duration": 6,
+                "fps": 25,
+                "audio": False,
                 "imagePath": str(image_path),
             },
         )
@@ -649,14 +650,13 @@ class TestForcedApiGenerate:
                 "prompt": "A city skyline",
                 "resolution": "1080p",
                 "model": "ultra",
-                "duration": "6",
-                "fps": "25",
-                "audio": "false",
+                "duration": 6,
+                "fps": 25,
+                "audio": False,
             },
         )
 
-        assert r.status_code == 400
-        assert r.json()["error"] == "INVALID_FORCED_API_MODEL"
+        assert r.status_code == 422
 
     def test_missing_api_key_returns_integrity_error(self, client, test_state):
         test_state.config.force_api_generations = True
@@ -668,9 +668,9 @@ class TestForcedApiGenerate:
                 "prompt": "A city skyline",
                 "resolution": "1080p",
                 "model": "pro",
-                "duration": "6",
-                "fps": "25",
-                "audio": "false",
+                "duration": 6,
+                "fps": 25,
+                "audio": False,
             },
         )
 
@@ -687,9 +687,9 @@ class TestForcedApiGenerate:
                 "prompt": "A city skyline",
                 "resolution": "720p",
                 "model": "pro",
-                "duration": "6",
-                "fps": "25",
-                "audio": "false",
+                "duration": 6,
+                "fps": 25,
+                "audio": False,
             },
         )
 
@@ -706,9 +706,9 @@ class TestForcedApiGenerate:
                 "prompt": "A city skyline",
                 "resolution": "1080p",
                 "model": "pro",
-                "duration": "5",
-                "fps": "25",
-                "audio": "false",
+                "duration": 5,
+                "fps": 25,
+                "audio": False,
             },
         )
 
@@ -725,9 +725,9 @@ class TestForcedApiGenerate:
                 "prompt": "A city skyline",
                 "resolution": "1080p",
                 "model": "pro",
-                "duration": "6",
-                "fps": "30",
-                "audio": "false",
+                "duration": 6,
+                "fps": 30,
+                "audio": False,
             },
         )
 
@@ -744,9 +744,9 @@ class TestForcedApiGenerate:
                 "prompt": "A city skyline",
                 "resolution": "1080p",
                 "model": "pro",
-                "duration": "6",
-                "fps": "25",
-                "audio": "false",
+                "duration": 6,
+                "fps": 25,
+                "audio": False,
                 "cameraMotion": "orbit",
             },
         )
@@ -764,9 +764,9 @@ class TestForcedApiGenerate:
                 "prompt": "A mountain lake",
                 "resolution": "1080p",
                 "model": "pro",
-                "duration": "6",
-                "fps": "25",
-                "audio": "false",
+                "duration": 6,
+                "fps": 25,
+                "audio": False,
             },
         )
 
@@ -783,8 +783,8 @@ class TestForcedApiGenerate:
                 "prompt": "A portrait video",
                 "resolution": "1080p",
                 "model": "fast",
-                "duration": "6",
-                "fps": "25",
+                "duration": 6,
+                "fps": 25,
                 "aspectRatio": "9:16",
             },
         )
@@ -803,8 +803,8 @@ class TestForcedApiGenerate:
                 "prompt": "A portrait video",
                 "resolution": "1440p",
                 "model": "fast",
-                "duration": "6",
-                "fps": "25",
+                "duration": 6,
+                "fps": 25,
                 "aspectRatio": "9:16",
             },
         )
@@ -823,8 +823,8 @@ class TestForcedApiGenerate:
                 "prompt": "A portrait video",
                 "resolution": "2160p",
                 "model": "pro",
-                "duration": "6",
-                "fps": "25",
+                "duration": 6,
+                "fps": 25,
                 "aspectRatio": "9:16",
             },
         )
@@ -843,8 +843,8 @@ class TestForcedApiGenerate:
                 "prompt": "A landscape video",
                 "resolution": "1080p",
                 "model": "fast",
-                "duration": "6",
-                "fps": "25",
+                "duration": 6,
+                "fps": 25,
             },
         )
 
@@ -862,8 +862,8 @@ class TestForcedApiGenerate:
                 "prompt": "A video",
                 "resolution": "1080p",
                 "model": "fast",
-                "duration": "6",
-                "fps": "25",
+                "duration": 6,
+                "fps": 25,
                 "aspectRatio": "4:3",
             },
         )
@@ -880,8 +880,8 @@ class TestForcedApiGenerate:
                 "prompt": "A long video",
                 "resolution": "1080p",
                 "model": "fast",
-                "duration": "20",
-                "fps": "24",
+                "duration": 20,
+                "fps": 24,
             },
         )
 
@@ -899,8 +899,8 @@ class TestForcedApiGenerate:
                 "prompt": "A long video",
                 "resolution": "1080p",
                 "model": "pro",
-                "duration": "20",
-                "fps": "24",
+                "duration": 20,
+                "fps": 24,
             },
         )
 
@@ -917,8 +917,8 @@ class TestForcedApiGenerate:
                 "prompt": "A long video",
                 "resolution": "1440p",
                 "model": "fast",
-                "duration": "20",
-                "fps": "24",
+                "duration": 20,
+                "fps": 24,
             },
         )
 
@@ -935,8 +935,8 @@ class TestForcedApiGenerate:
                 "prompt": "A video",
                 "resolution": "1080p",
                 "model": "fast",
-                "duration": "6",
-                "fps": "24",
+                "duration": 6,
+                "fps": 24,
             },
         )
 
@@ -954,8 +954,8 @@ class TestForcedApiGenerate:
                 "prompt": "A video",
                 "resolution": "1080p",
                 "model": "fast",
-                "duration": "6",
-                "fps": "48",
+                "duration": 6,
+                "fps": 48,
             },
         )
 
@@ -975,8 +975,8 @@ class TestForcedApiGenerate:
                 "prompt": "A portrait music video",
                 "resolution": "1080p",
                 "model": "pro",
-                "duration": "6",
-                "fps": "25",
+                "duration": 6,
+                "fps": 25,
                 "audioPath": str(audio_file),
                 "aspectRatio": "9:16",
             },
@@ -997,9 +997,9 @@ class TestForcedApiGenerate:
             json={
                 "prompt": "A big video",
                 "resolution": "2160p",
-                "model": "fast",
-                "duration": "6",
-                "fps": "25",
+                "model": "pro",
+                "duration": 6,
+                "fps": 25,
                 "audioPath": str(audio_file),
                 "aspectRatio": "9:16",
             },
@@ -1234,7 +1234,7 @@ class TestEnhancePromptFlag:
         audio_file = tmp_path / "test_audio.wav"
         _write_test_wav(audio_file)
 
-        r = client.post("/api/generate", json={**_T2V_JSON, "audioPath": str(audio_file)})
+        r = client.post("/api/generate", json={**_T2V_JSON, "model": "pro", "audioPath": str(audio_file)})
         assert r.status_code == 200
 
         assert len(fake_services.text_encoder.encode_calls) == 1
@@ -1249,7 +1249,10 @@ class TestEnhancePromptFlag:
         image_path = tmp_path / "input.png"
         image_path.write_bytes(make_test_image().getvalue())
 
-        r = client.post("/api/generate", json={**_T2V_JSON, "audioPath": str(audio_file), "imagePath": str(image_path)})
+        r = client.post(
+            "/api/generate",
+            json={**_T2V_JSON, "model": "pro", "audioPath": str(audio_file), "imagePath": str(image_path)},
+        )
         assert r.status_code == 200
 
         assert len(fake_services.text_encoder.encode_calls) == 1

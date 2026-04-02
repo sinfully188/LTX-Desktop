@@ -10,7 +10,12 @@ from threading import RLock
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from api_types import DownloadProgressResponse
+from api_types import (
+    DownloadProgressCompleteResponse,
+    DownloadProgressErrorResponse,
+    DownloadProgressResponse,
+    DownloadProgressRunningResponse,
+)
 from handlers.base import StateHandlerBase, with_state_lock
 from handlers.models_handler import ModelsHandler
 from runtime_config.model_download_specs import (
@@ -21,7 +26,15 @@ from runtime_config.model_download_specs import (
     resolve_model_path,
 )
 from services.interfaces import ModelDownloader, TaskRunner
-from state.app_state_types import AppState, DownloadingSession, FileDownloadRunning, ModelFileType
+from state.app_state_types import (
+    AppState,
+    DownloadSessionComplete,
+    DownloadSessionError,
+    DownloadSessionId,
+    DownloadingSession,
+    FileDownloadRunning,
+    ModelFileType,
+)
 
 if TYPE_CHECKING:
     from runtime_config.runtime_config import RuntimeConfig
@@ -49,8 +62,8 @@ class DownloadHandler(StateHandlerBase):
         return self.state.downloading_session is not None
 
     @with_state_lock
-    def start_download(self, files_to_download: set[ModelFileType]) -> str:
-        session_id = uuid4().hex
+    def start_download(self, files_to_download: set[ModelFileType]) -> DownloadSessionId:
+        session_id = DownloadSessionId(uuid4().hex)
         self.state.downloading_session = DownloadingSession(
             id=session_id,
             current_running_file=None,
@@ -72,7 +85,7 @@ class DownloadHandler(StateHandlerBase):
             file_type=file_type,
             target_path=target,
             downloaded_bytes=0,
-            speed_mbps=0.0,
+            speed_bytes_per_sec=0.0,
         )
 
     @with_state_lock
@@ -83,11 +96,11 @@ class DownloadHandler(StateHandlerBase):
         if session.current_running_file is not None:
             session.completed_bytes += session.current_running_file.downloaded_bytes
             session.completed_files.add(session.current_running_file.file_type)
-        self.state.completed_download_sessions[session.id] = "complete"
+        self.state.completed_download_sessions[session.id] = DownloadSessionComplete()
         self.state.downloading_session = None
 
     @with_state_lock
-    def update_file_progress(self, file_type: ModelFileType, downloaded: int, speed_mbps: float) -> None:
+    def update_file_progress(self, file_type: ModelFileType, downloaded: int, speed_bytes_per_sec: float) -> None:
         session = self.state.downloading_session
         if session is None:
             return
@@ -95,23 +108,36 @@ class DownloadHandler(StateHandlerBase):
         if rf is None or rf.file_type != file_type:
             return
         rf.downloaded_bytes = downloaded
-        rf.speed_mbps = speed_mbps
+        rf.speed_bytes_per_sec = speed_bytes_per_sec
 
     @with_state_lock
     def fail_download(self, error: str) -> None:
         logger.error("Model download failed: %s", error)
         session = self.state.downloading_session
         if session is not None:
-            self.state.completed_download_sessions[session.id] = error
+            self.state.completed_download_sessions[session.id] = DownloadSessionError(error_message=error)
             self.state.downloading_session = None
 
     def _make_progress_callback(self, file_type: ModelFileType) -> Callable[[int], None]:
-        start_time = time.monotonic()
+        last_sample_time = time.monotonic()
+        last_sample_bytes = 0
+        smoothed_speed = 0.0
 
         def on_progress(downloaded: int) -> None:
-            elapsed = time.monotonic() - start_time
-            speed_mbps = (downloaded / elapsed / (1024 * 1024)) if elapsed > 0 else 0.0
-            self.update_file_progress(file_type, downloaded, speed_mbps)
+            nonlocal last_sample_time, last_sample_bytes, smoothed_speed
+            now = time.monotonic()
+            elapsed = now - last_sample_time
+            if elapsed >= 1.0:
+                instant_speed = (downloaded - last_sample_bytes) / elapsed
+                # EWMA: weight new sample at 30%, keep 70% of previous.
+                # On first sample (smoothed_speed == 0) use instant value.
+                if smoothed_speed == 0.0:
+                    smoothed_speed = instant_speed
+                else:
+                    smoothed_speed = 0.3 * instant_speed + 0.7 * smoothed_speed
+                last_sample_time = now
+                last_sample_bytes = downloaded
+            self.update_file_progress(file_type, downloaded, smoothed_speed)
 
         return on_progress
 
@@ -120,8 +146,9 @@ class DownloadHandler(StateHandlerBase):
 
     @with_state_lock
     def get_download_progress(self, session_id: str) -> DownloadProgressResponse:
+        typed_session_id = DownloadSessionId(session_id)
         session = self.state.downloading_session
-        if session is not None and session.id == session_id:
+        if session is not None and session.id == typed_session_id:
             rf = session.current_running_file
             current_downloaded = rf.downloaded_bytes if rf else 0
             total_downloaded = session.completed_bytes + current_downloaded
@@ -130,17 +157,17 @@ class DownloadHandler(StateHandlerBase):
                 self.config.spec_for(ft).expected_size_bytes for ft in session.files_to_download
             )
 
-            current_file_progress = 0
+            current_file_progress = 0.0
             if rf is not None:
                 spec = self.config.spec_for(rf.file_type)
                 if spec.expected_size_bytes > 0:
-                    current_file_progress = min(99, int(rf.downloaded_bytes / spec.expected_size_bytes * 100))
+                    current_file_progress = min(99.0, rf.downloaded_bytes / spec.expected_size_bytes * 100)
 
-            total_progress = 0
+            total_progress = 0.0
             if expected_total_bytes > 0:
-                total_progress = min(99, int(total_downloaded / expected_total_bytes * 100))
+                total_progress = min(99.0, total_downloaded / expected_total_bytes * 100)
 
-            return DownloadProgressResponse(
+            return DownloadProgressRunningResponse(
                 status="downloading",
                 current_downloading_file=rf.file_type if rf else None,
                 current_file_progress=current_file_progress,
@@ -149,38 +176,17 @@ class DownloadHandler(StateHandlerBase):
                 expected_total_bytes=expected_total_bytes,
                 completed_files=set(session.completed_files),
                 all_files=set(session.files_to_download),
-                speed_mbps=int(rf.speed_mbps) if rf else 0,
+                speed_bytes_per_sec=rf.speed_bytes_per_sec if rf else 0.0,
                 error=None,
             )
 
-        result = self.state.completed_download_sessions.get(session_id)
+        result = self.state.completed_download_sessions.get(typed_session_id)
         if result is not None:
-            if result == "complete":
-                return DownloadProgressResponse(
-                    status="complete",
-                    current_downloading_file=None,
-                    current_file_progress=100,
-                    total_progress=100,
-                    total_downloaded_bytes=0,
-                    expected_total_bytes=0,
-                    completed_files=set(),
-                    all_files=set(),
-                    speed_mbps=0,
-                    error=None,
-                )
-            else:
-                return DownloadProgressResponse(
-                    status="error",
-                    current_downloading_file=None,
-                    current_file_progress=0,
-                    total_progress=0,
-                    total_downloaded_bytes=0,
-                    expected_total_bytes=0,
-                    completed_files=set(),
-                    all_files=set(),
-                    speed_mbps=0,
-                    error=result,
-                )
+            match result:
+                case DownloadSessionComplete():
+                    return DownloadProgressCompleteResponse(status="complete")
+                case DownloadSessionError(error_message=error_message):
+                    return DownloadProgressErrorResponse(status="error", error=error_message)
 
         raise ValueError(f"Unknown download session: {session_id}")
 
@@ -258,7 +264,7 @@ class DownloadHandler(StateHandlerBase):
         self.finish_download()
         self._models_handler.refresh_available_files()
 
-    def start_model_download(self, model_types: set[ModelFileType]) -> str | None:
+    def start_model_download(self, model_types: set[ModelFileType]) -> DownloadSessionId | None:
         with self._lock:
             if self.state.downloading_session is not None:
                 return None
@@ -274,7 +280,7 @@ class DownloadHandler(StateHandlerBase):
         )
         return session_id
 
-    def start_text_encoder_download(self) -> str | None:
+    def start_text_encoder_download(self) -> DownloadSessionId | None:
         with self._lock:
             if self.state.downloading_session is not None:
                 return None

@@ -6,7 +6,12 @@ from pathlib import Path
 from huggingface_hub import file_download
 
 from runtime_config.model_download_specs import resolve_downloading_dir, resolve_model_path
-from state.app_state_types import DownloadingSession, FileDownloadRunning
+from state.app_state_types import (
+    DownloadSessionComplete,
+    DownloadSessionError,
+    DownloadingSession,
+    FileDownloadRunning,
+)
 
 
 def _model_path(test_state, model_type: str) -> Path:
@@ -105,7 +110,7 @@ class TestDownloadProgress:
                 file_type="checkpoint",
                 target_path="checkpoint",
                 downloaded_bytes=5_000_000_000,
-                speed_mbps=50,
+                speed_bytes_per_sec=50_000_000.0,
             ),
             files_to_download={"checkpoint"},
             completed_files=set(),
@@ -117,13 +122,13 @@ class TestDownloadProgress:
         assert data["current_downloading_file"] == "checkpoint"
 
     def test_completed_session(self, client, test_state):
-        test_state.state.completed_download_sessions["done-session"] = "complete"
+        test_state.state.completed_download_sessions["done-session"] = DownloadSessionComplete()
         r = client.get("/api/models/download/progress", params={"sessionId": "done-session"})
         data = r.json()
         assert data["status"] == "complete"
 
     def test_error_session(self, client, test_state):
-        test_state.state.completed_download_sessions["err-session"] = "network error"
+        test_state.state.completed_download_sessions["err-session"] = DownloadSessionError(error_message="network error")
         r = client.get("/api/models/download/progress", params={"sessionId": "err-session"})
         data = r.json()
         assert data["status"] == "error"
@@ -344,9 +349,10 @@ class TestAtomicDownloads:
 class TestHuggingFaceInternals:
     """Guard tests for huggingface_hub internals we rely on.
 
-    We monkey-patch ``file_download.http_get`` to inject a custom tqdm bar
-    for progress tracking during ``hf_hub_download`` (which has no public
-    ``tqdm_class`` parameter, unlike ``snapshot_download``).
+    We monkey-patch ``file_download.http_get`` and ``file_download.xet_get``
+    to inject a custom tqdm bar for progress tracking during
+    ``hf_hub_download`` (which has no public ``tqdm_class`` parameter,
+    unlike ``snapshot_download``).
 
     If these tests break after a huggingface_hub upgrade, the internal API
     has changed.  Find an alternative approach and raise to a developer.
@@ -362,4 +368,13 @@ class TestHuggingFaceInternals:
         sig = inspect.signature(file_download.http_get)
         assert "_tqdm_bar" in sig.parameters, (
             "file_download.http_get no longer accepts _tqdm_bar — progress patch for hf_hub_download is broken"
+        )
+
+    def test_xet_get_accepts_tqdm_bar(self):
+        xet_get = getattr(file_download, "xet_get", None)
+        if xet_get is None:
+            return  # xet_get not present in this version; patch skips it gracefully
+        sig = inspect.signature(xet_get)
+        assert "_tqdm_bar" in sig.parameters, (
+            "file_download.xet_get no longer accepts _tqdm_bar — progress patch for xet downloads is broken"
         )

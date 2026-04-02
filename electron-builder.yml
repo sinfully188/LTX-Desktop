@@ -40,7 +40,7 @@ win:
   icon: resources/icon.ico
   artifactName: ${productName}-Setup.${ext}
   azureSignOptions:
-    publisherName: Lightricks Ltd
+    publisherName: Lightricks US Inc
     endpoint: https://eus.codesigning.azure.net/
     certificateProfileName: ltx-desktop-trusted
     codeSigningAccountName: ltx-trusted
@@ -79,6 +79,9 @@ mac:
     - target: dmg
       arch:
         - arm64
+    - target: zip
+      arch:
+        - arm64
   icon: resources/icon.icns
   category: public.app-category.video
   artifactName: ${productName}-${arch}.${ext}
@@ -91,6 +94,26 @@ dmg:
       y: 220
       type: link
       path: /Applications
+
+linux:
+  target:
+    - AppImage
+    - deb
+  icon: resources/icons
+  category: Video
+  artifactName: ${productName}-${arch}.${ext}
+
+deb:
+  depends:
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0
+    - libuuid1
+    - libsecret-1-0
 
 publish:
   provider: github
